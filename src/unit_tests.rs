@@ -64,3 +64,33 @@ fn right_combinator() {
         right.parse(&tag3_incomplete)
     );
 }
+
+#[test]
+fn one_or_more_combinator() {
+    let parser = one_or_more(match_literal("ha"));
+    assert_eq!(Ok(("", vec![(), (), ()])), parser.parse("hahaha"));
+    assert_eq!(Err(Error::NotFound(String::from("ahah"))), parser.parse("ahah"));
+    assert_eq!(Err(Error::NotFound(String::new())), parser.parse(""));
+}
+
+#[test]
+fn zero_or_more_combinator() {
+    let parser = zero_or_more(match_literal("ha"));
+    assert_eq!(Ok(("", vec![(), (), ()])), parser.parse("hahaha"));
+    assert_eq!(Ok(("ahah", vec![])), parser.parse("ahah"));
+    assert_eq!(Ok(("", vec![])), parser.parse(""));
+}
+
+#[test]
+fn any_combinator() {
+    let checker = any_char;
+    assert_eq!(Ok(("", 'x')), checker("x"));
+    assert_eq!(Err(Error::NotFound(String::new())), checker(""));
+}
+
+#[test]
+fn predicate_combinator() {
+    let parser = pred(any_char, |c| *c == 'o');
+    assert_eq!(Ok(("mg", 'o')), parser.parse("omg"));
+    assert_eq!(Err(Error::NotFound(String::from("lol"))), parser.parse("lol"));
+}

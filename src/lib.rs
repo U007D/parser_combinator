@@ -127,3 +127,69 @@ where
 {
     map(pair(parser1, parser2), |(_left, right)| right)
 }
+
+pub fn one_or_more<'a, P, A>(parser: P) -> impl Parser<'a, Vec<A>>
+where
+    P: Parser<'a, A>,
+{
+    move |mut input| {
+        let mut result = Vec::new();
+
+        match parser.parse(input) {
+            Ok((next_input, first_item)) => {
+                input = next_input;
+                result.push(first_item);
+            }
+            Err(e) => Err(e)?,
+        }
+
+        while let Ok((next_input, next_item)) = parser.parse(input) {
+            input = next_input;
+            result.push(next_item);
+        }
+
+        Ok((input, result))
+    }
+}
+
+pub fn zero_or_more<'a, P, A>(parser: P) -> impl Parser<'a, Vec<A>>
+where
+    P: Parser<'a, A>,
+{
+    move |mut input| {
+        let mut result = Vec::new();
+
+        while let Ok((next_input, next_item)) = parser.parse(input) {
+            input = next_input;
+            result.push(next_item);
+        }
+
+        Ok((input, result))
+    }
+}
+
+pub fn any_char(input: &str) -> ParseResult<'_, char> {
+    match input.chars().next() {
+        Some(next) => Ok((
+            input
+                .get(next.len_utf8()..)
+                .ok_or_else(|| Error::InvalidSliceIndex(next.len_utf8()))?,
+            next,
+        )),
+        _ => Err(Error::NotFound(String::from(input))),
+    }
+}
+
+pub fn pred<'a, P, A, F>(parser: P, predicate: F) -> impl Parser<'a, A>
+where
+    P: Parser<'a, A>,
+    F: Fn(&A) -> bool,
+{
+    move |input| match parser.parse(input) {
+        Ok((next_input, value)) => match predicate(&value) {
+            true => Ok((next_input, value)),
+            false => Err(Error::NotFound(String::from(input))),
+        },
+        Err(e) => Err(e),
+    }
+}
