@@ -3,11 +3,11 @@ use super::*;
 #[test]
 fn literal_parser() {
     let parse_joe = match_literal("Hello Joe!");
-    assert_eq!(Ok(("", ())), parse_joe("Hello Joe!"));
-    assert_eq!(Ok((" Hello Robert!", ())), parse_joe("Hello Joe! Hello Robert!"));
+    assert_eq!(Ok(("", ())), parse_joe.parse("Hello Joe!"));
+    assert_eq!(Ok((" Hello Robert!", ())), parse_joe.parse("Hello Joe! Hello Robert!"));
     assert_eq!(
         Err(Error::NotFound(String::from("Hello Mike!"))),
-        parse_joe("Hello Mike!")
+        parse_joe.parse("Hello Mike!")
     );
 }
 
@@ -30,17 +30,37 @@ fn pair_combinator() {
     let tag1_open = "<";
     let tag1_attr = "my-first-element";
     let tag1_close = "/>";
-    let tag2 = "oops!";
-    let tag3 = "!oops";
+    let tag1 = String::from(tag1_open) + tag1_attr + tag1_close;
+    let tag2_attr = "oops!";
+    let tag3_attr = "!oops";
+    let tag3_incomplete = String::from(tag1_open) + tag3_attr;
     let tag_opener = pair(match_literal("<"), identifier);
 
+    assert_eq!(Ok((tag1_close, ((), String::from(tag1_attr)))), tag_opener.parse(&tag1));
     assert_eq!(
-        Ok((tag1_close, ((), String::from(tag1_attr)))),
-        tag_opener(&(String::from(tag1_open) + tag1_attr + tag1_close))
+        Err(Error::NotFound(String::from(tag2_attr))),
+        tag_opener.parse(tag2_attr)
     );
-    assert_eq!(Err(Error::NotFound(String::from(tag2))), tag_opener(tag2));
     assert_eq!(
-        Err(Error::NotFound(String::from(tag3))),
-        tag_opener(&(String::from(tag1_open) + tag3))
+        Err(Error::NotFound(String::from(tag3_attr))),
+        tag_opener.parse(&tag3_incomplete)
+    );
+}
+
+#[test]
+fn right_combinator() {
+    let tag1_open = "<";
+    let tag1_attr = "my-first-element";
+    let tag1_close = "/>";
+    let tag1 = String::from(tag1_open) + tag1_attr + tag1_close;
+    let tag2_attr = "oops!";
+    let tag3_attr = "!oops";
+    let tag3_incomplete = String::from(tag1_open) + tag3_attr;
+    let right = right(match_literal(tag1_open), identifier);
+    assert_eq!(Ok((tag1_close, String::from(tag1_attr))), right.parse(&tag1));
+    assert_eq!(Err(Error::NotFound(String::from(tag2_attr))), right.parse(tag2_attr));
+    assert_eq!(
+        Err(Error::NotFound(String::from(tag3_attr))),
+        right.parse(&tag3_incomplete)
     );
 }
