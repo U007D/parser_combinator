@@ -42,6 +42,26 @@ pub trait Parser<'a, Output> {
     {
         BoxedParser::new(map(self, map_fn))
     }
+
+    fn pred<F>(self, pred_fn: F) -> BoxedParser<'a, Output>
+    where
+        Self: Sized + 'a,
+        Output: 'a,
+        F: Fn(&Output) -> bool + 'a,
+    {
+        BoxedParser::new(pred(self, pred_fn))
+    }
+
+    fn and_then<F, NextParser, NewOutput>(self, f: F) -> BoxedParser<'a, NewOutput>
+        where
+            Self: Sized + 'a,
+            Output: 'a,
+            NewOutput: 'a,
+            NextParser: Parser<'a, NewOutput> + 'a,
+            F: Fn(Output) -> NextParser + 'a,
+    {
+        BoxedParser::new(and_then(self, f))
+    }
 }
 
 impl<'a, F, Output> Parser<'a, Output> for F
@@ -54,7 +74,7 @@ where
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-struct Element {
+pub struct Element {
     name: String,
     attributes: Vec<(String, String)>,
     children: Vec<Element>,
@@ -219,7 +239,7 @@ pub fn space0<'a>() -> impl Parser<'a, Vec<char>> {
 pub fn quoted_string<'a>() -> impl Parser<'a, String> {
     right(
         match_literal("\""),
-        left(zero_or_more(pred(any_char, |c| *c != '"')), match_literal("\"")),
+        left(zero_or_more(any_char.pred(|c| *c != '"')), match_literal("\"")),
     )
     .map(|chars| chars.into_iter().collect())
 }
@@ -232,19 +252,17 @@ pub fn attributes<'a>() -> impl Parser<'a, Vec<(String, String)>> {
     zero_or_more(right(space1(), attribute_pair()))
 }
 
-//fn element_start<'a>() -> impl Parser<'a, (String, Vec<(String, String)>)> {
-//    right(match_literal("<"), pair(identifier, attributes()))
-//}
-//
-//fn single_element<'a>() -> impl Parser<'a, Element> {
-//    map(left(element_start(), match_literal("/>")), |(name, attributes)| {
-//        Element {
-//            name,
-//            attributes,
-//            children: vec![],
-//        }
-//    })
-//}
+pub fn element_start<'a>() -> impl Parser<'a, (String, Vec<(String, String)>)> {
+    right(match_literal("<"), pair(identifier, attributes()))
+}
+
+pub fn single_element<'a>() -> impl Parser<'a, Element> {
+    left(element_start(), match_literal("/>")).map(|(name, attributes)| Element {
+        name,
+        attributes,
+        children: vec![],
+    })
+}
 
 pub struct BoxedParser<'a, Output> {
     parser: Box<dyn Parser<'a, Output> + 'a>,
@@ -264,5 +282,51 @@ impl<'a, Output> BoxedParser<'a, Output> {
 impl<'a, Output> Parser<'a, Output> for BoxedParser<'a, Output> {
     fn parse(&self, input: &'a str) -> ParseResult<'a, Output> {
         self.parser.parse(input)
+    }
+}
+
+pub fn open_element<'a>() -> impl Parser<'a, Element> {
+    left(element_start(), match_literal(">")).map(|(name, attributes)| Element {
+        name,
+        attributes,
+        children: vec![],
+    })
+}
+
+pub fn either<'a, P1, P2, A>(parser1: P1, parser2: P2) -> impl Parser<'a, A>
+where
+    P1: Parser<'a, A>,
+    P2: Parser<'a, A>,
+{
+    move |input| match parser1.parse(input) {
+        ok @ Ok(_) => ok,
+        Err(_) => parser2.parse(input),
+    }
+}
+
+pub fn element<'a>() -> impl Parser<'a, Element> {
+    either(single_element(), open_element())
+}
+
+pub fn close_element<'a>(expected_name: String) -> impl Parser<'a, String> {
+    right(match_literal("</"), left(identifier, match_literal(">"))).pred(move |name| name == &expected_name)
+}
+
+fn parent_element<'a>() -> impl Parser<'a, Element> {
+    pair(
+        open_element(),
+        left(zero_or_more(element()), close_element(…oops)),
+    )
+}
+
+fn and_then<'a, P, F, A, B, NextP>(parser: P, f: F) -> impl Parser<'a, B>
+    where
+        P: Parser<'a, A>,
+        NextP: Parser<'a, B>,
+        F: Fn(A) -> NextP,
+{
+    move |input| match parser.parse(input) {
+        Ok((next_input, result)) => f(result).parse(next_input),
+        Err(err) => Err(err),
     }
 }

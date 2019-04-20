@@ -117,17 +117,17 @@ fn attribute_parser() {
     );
 }
 
-//#[test]
-//fn single_element_parser() {
-//    assert_eq!(
-//        Ok((
-//            "",
-//            Element {
-//                name: String::from("div"),
-//                attributes: vec![(String::from("class"), String::from("float"))],
-//                children: vec![]
-//            }
-//        )),
-//        single_element().parse("<div class=\"float\"/>")
-//    );
-//}
+#[test]
+fn single_element_parser() {
+    assert_eq!(
+        Ok((
+            "",
+            Element {
+                name: String::from("div"),
+                attributes: vec![(String::from("class"), String::from("float"))],
+                children: vec![]
+            }
+        )),
+        single_element().parse("<div class=\"float\"/>")
+    );
+}
