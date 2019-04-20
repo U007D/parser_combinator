@@ -6,7 +6,7 @@ fn literal_parser() {
     assert_eq!(Ok(("", ())), parse_joe.parse("Hello Joe!"));
     assert_eq!(Ok((" Hello Robert!", ())), parse_joe.parse("Hello Joe! Hello Robert!"));
     assert_eq!(
-        Err(Error::NotFound(String::from("Hello Mike!"))),
+        Err(Error::ParseGrammarViolation(String::from("Hello Mike!"))),
         parse_joe.parse("Hello Mike!")
     );
 }
@@ -22,7 +22,10 @@ fn identifier_parser() {
     assert_eq!(Ok((out_str, in_string)), identifier(&full_string));
 
     let full_str = "!not at all an identifier";
-    assert_eq!(Err(Error::NotFound(String::from(full_str))), identifier(full_str));
+    assert_eq!(
+        Err(Error::ParseGrammarViolation(String::from(full_str))),
+        identifier(full_str)
+    );
 }
 
 #[test]
@@ -38,11 +41,11 @@ fn pair_combinator() {
 
     assert_eq!(Ok((tag1_close, ((), String::from(tag1_attr)))), tag_opener.parse(&tag1));
     assert_eq!(
-        Err(Error::NotFound(String::from(tag2_attr))),
+        Err(Error::ParseGrammarViolation(String::from(tag2_attr))),
         tag_opener.parse(tag2_attr)
     );
     assert_eq!(
-        Err(Error::NotFound(String::from(tag3_attr))),
+        Err(Error::ParseGrammarViolation(String::from(tag3_attr))),
         tag_opener.parse(&tag3_incomplete)
     );
 }
@@ -58,9 +61,12 @@ fn right_combinator() {
     let tag3_incomplete = String::from(tag1_open) + tag3_attr;
     let right = right(match_literal(tag1_open), identifier);
     assert_eq!(Ok((tag1_close, String::from(tag1_attr))), right.parse(&tag1));
-    assert_eq!(Err(Error::NotFound(String::from(tag2_attr))), right.parse(tag2_attr));
     assert_eq!(
-        Err(Error::NotFound(String::from(tag3_attr))),
+        Err(Error::ParseGrammarViolation(String::from(tag2_attr))),
+        right.parse(tag2_attr)
+    );
+    assert_eq!(
+        Err(Error::ParseGrammarViolation(String::from(tag3_attr))),
         right.parse(&tag3_incomplete)
     );
 }
@@ -69,8 +75,11 @@ fn right_combinator() {
 fn one_or_more_combinator() {
     let parser = one_or_more(match_literal("ha"));
     assert_eq!(Ok(("", vec![(), (), ()])), parser.parse("hahaha"));
-    assert_eq!(Err(Error::NotFound(String::from("ahah"))), parser.parse("ahah"));
-    assert_eq!(Err(Error::NotFound(String::new())), parser.parse(""));
+    assert_eq!(
+        Err(Error::ParseGrammarViolation(String::from("ahah"))),
+        parser.parse("ahah")
+    );
+    assert_eq!(Err(Error::ParseGrammarViolation(String::new())), parser.parse(""));
 }
 
 #[test]
@@ -85,14 +94,17 @@ fn zero_or_more_combinator() {
 fn any_combinator() {
     let checker = any_char;
     assert_eq!(Ok(("", 'x')), checker("x"));
-    assert_eq!(Err(Error::NotFound(String::new())), checker(""));
+    assert_eq!(Err(Error::ParseGrammarViolation(String::new())), checker(""));
 }
 
 #[test]
 fn predicate_combinator() {
     let parser = pred(any_char, |c| *c == 'o');
     assert_eq!(Ok(("mg", 'o')), parser.parse("omg"));
-    assert_eq!(Err(Error::NotFound(String::from("lol"))), parser.parse("lol"));
+    assert_eq!(
+        Err(Error::ParseGrammarViolation(String::from("lol"))),
+        parser.parse("lol")
+    );
 }
 
 #[test]

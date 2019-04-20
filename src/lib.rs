@@ -53,12 +53,12 @@ pub trait Parser<'a, Output> {
     }
 
     fn and_then<F, NextParser, NewOutput>(self, f: F) -> BoxedParser<'a, NewOutput>
-        where
-            Self: Sized + 'a,
-            Output: 'a,
-            NewOutput: 'a,
-            NextParser: Parser<'a, NewOutput> + 'a,
-            F: Fn(Output) -> NextParser + 'a,
+    where
+        Self: Sized + 'a,
+        Output: 'a,
+        NewOutput: 'a,
+        NextParser: Parser<'a, NewOutput> + 'a,
+        F: Fn(Output) -> NextParser + 'a,
     {
         BoxedParser::new(and_then(self, f))
     }
@@ -75,9 +75,9 @@ where
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Element {
-    name: String,
-    attributes: Vec<(String, String)>,
-    children: Vec<Element>,
+    pub name: String,
+    pub attributes: Vec<(String, String)>,
+    pub children: Vec<Element>,
 }
 
 pub fn match_literal<'a>(expected: &'static str) -> impl Parser<'a, ()> {
@@ -88,7 +88,7 @@ pub fn match_literal<'a>(expected: &'static str) -> impl Parser<'a, ()> {
                 .ok_or_else(|| Error::InvalidSliceIndex(expected.len()))?,
             (),
         )),
-        _ => Err(Error::NotFound(String::from(input))),
+        _ => Err(Error::ParseGrammarViolation(String::from(input))),
     }
 }
 
@@ -98,7 +98,7 @@ pub fn identifier(input: &str) -> ParseResult<'_, String> {
 
     match chars.next() {
         Some(next_input) if next_input.is_alphabetic() => matched.push(next_input),
-        _ => return Err(Error::NotFound(String::from(input))),
+        _ => return Err(Error::ParseGrammarViolation(String::from(input))),
     }
 
     while let Some(next_input) = chars.next() {
@@ -206,7 +206,7 @@ pub fn any_char(input: &str) -> ParseResult<'_, char> {
                 .ok_or_else(|| Error::InvalidSliceIndex(next.len_utf8()))?,
             next,
         )),
-        _ => Err(Error::NotFound(String::from(input))),
+        _ => Err(Error::ParseGrammarViolation(String::from(input))),
     }
 }
 
@@ -218,7 +218,7 @@ where
     move |input| match parser.parse(input) {
         Ok((next_input, value)) => match predicate(&value) {
             true => Ok((next_input, value)),
-            false => Err(Error::NotFound(String::from(input))),
+            false => Err(Error::ParseGrammarViolation(String::from(input))),
         },
         Err(e) => Err(e),
     }
@@ -305,28 +305,38 @@ where
 }
 
 pub fn element<'a>() -> impl Parser<'a, Element> {
-    either(single_element(), open_element())
+    whitespace_trim(either(single_element(), parent_element()))
 }
 
 pub fn close_element<'a>(expected_name: String) -> impl Parser<'a, String> {
     right(match_literal("</"), left(identifier, match_literal(">"))).pred(move |name| name == &expected_name)
 }
 
-fn parent_element<'a>() -> impl Parser<'a, Element> {
-    pair(
-        open_element(),
-        left(zero_or_more(element()), close_element(…oops)),
-    )
+pub fn parent_element<'a>() -> impl Parser<'a, Element> {
+    open_element().and_then(|el| {
+        left(zero_or_more(element()), close_element(el.name.clone())).map(move |children| {
+            let mut el = el.clone();
+            el.children = children;
+            el
+        })
+    })
 }
 
-fn and_then<'a, P, F, A, B, NextP>(parser: P, f: F) -> impl Parser<'a, B>
-    where
-        P: Parser<'a, A>,
-        NextP: Parser<'a, B>,
-        F: Fn(A) -> NextP,
+pub fn and_then<'a, P, F, A, B, NextP>(parser: P, f: F) -> impl Parser<'a, B>
+where
+    P: Parser<'a, A>,
+    NextP: Parser<'a, B>,
+    F: Fn(A) -> NextP,
 {
     move |input| match parser.parse(input) {
         Ok((next_input, result)) => f(result).parse(next_input),
         Err(err) => Err(err),
     }
+}
+
+pub fn whitespace_trim<'a, P, A>(parser: P) -> impl Parser<'a, A>
+where
+    P: Parser<'a, A>,
+{
+    right(space0(), left(parser, space0()))
 }
