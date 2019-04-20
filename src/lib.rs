@@ -32,6 +32,16 @@ type ParseResult<'a, Output> = Result<(&'a str, Output)>;
 
 pub trait Parser<'a, Output> {
     fn parse(&self, input: &'a str) -> ParseResult<'a, Output>;
+
+    fn map<F, NewOutput>(self, map_fn: F) -> BoxedParser<'a, NewOutput>
+    where
+        Self: Sized + 'a,
+        Output: 'a,
+        NewOutput: 'a,
+        F: Fn(Output) -> NewOutput + 'a,
+    {
+        BoxedParser::new(map(self, map_fn))
+    }
 }
 
 impl<'a, F, Output> Parser<'a, Output> for F
@@ -191,5 +201,68 @@ where
             false => Err(Error::NotFound(String::from(input))),
         },
         Err(e) => Err(e),
+    }
+}
+
+pub fn whitespace_char<'a>() -> impl Parser<'a, char> {
+    pred(any_char, |c| c.is_whitespace())
+}
+
+pub fn space1<'a>() -> impl Parser<'a, Vec<char>> {
+    one_or_more(whitespace_char())
+}
+
+pub fn space0<'a>() -> impl Parser<'a, Vec<char>> {
+    zero_or_more(whitespace_char())
+}
+
+pub fn quoted_string<'a>() -> impl Parser<'a, String> {
+    right(
+        match_literal("\""),
+        left(zero_or_more(pred(any_char, |c| *c != '"')), match_literal("\"")),
+    )
+    .map(|chars| chars.into_iter().collect())
+}
+
+pub fn attribute_pair<'a>() -> impl Parser<'a, (String, String)> {
+    pair(identifier, right(match_literal("="), quoted_string()))
+}
+
+pub fn attributes<'a>() -> impl Parser<'a, Vec<(String, String)>> {
+    zero_or_more(right(space1(), attribute_pair()))
+}
+
+//fn element_start<'a>() -> impl Parser<'a, (String, Vec<(String, String)>)> {
+//    right(match_literal("<"), pair(identifier, attributes()))
+//}
+//
+//fn single_element<'a>() -> impl Parser<'a, Element> {
+//    map(left(element_start(), match_literal("/>")), |(name, attributes)| {
+//        Element {
+//            name,
+//            attributes,
+//            children: vec![],
+//        }
+//    })
+//}
+
+pub struct BoxedParser<'a, Output> {
+    parser: Box<dyn Parser<'a, Output> + 'a>,
+}
+
+impl<'a, Output> BoxedParser<'a, Output> {
+    pub fn new<P>(parser: P) -> Self
+    where
+        P: Parser<'a, Output> + 'a,
+    {
+        BoxedParser {
+            parser: Box::new(parser),
+        }
+    }
+}
+
+impl<'a, Output> Parser<'a, Output> for BoxedParser<'a, Output> {
+    fn parse(&self, input: &'a str) -> ParseResult<'a, Output> {
+        self.parser.parse(input)
     }
 }

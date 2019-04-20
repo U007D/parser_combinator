@@ -94,3 +94,40 @@ fn predicate_combinator() {
     assert_eq!(Ok(("mg", 'o')), parser.parse("omg"));
     assert_eq!(Err(Error::NotFound(String::from("lol"))), parser.parse("lol"));
 }
+
+#[test]
+fn quoted_string_parser() {
+    assert_eq!(
+        Ok(("", String::from("Hello, Joe!"))),
+        quoted_string().parse("\"Hello, Joe!\"")
+    );
+}
+
+#[test]
+fn attribute_parser() {
+    assert_eq!(
+        Ok((
+            "",
+            vec![
+                (String::from("one"), String::from("1")),
+                (String::from("two"), String::from("2")),
+            ]
+        )),
+        attributes().parse(" one=\"1\" two=\"2\"")
+    );
+}
+
+//#[test]
+//fn single_element_parser() {
+//    assert_eq!(
+//        Ok((
+//            "",
+//            Element {
+//                name: String::from("div"),
+//                attributes: vec![(String::from("class"), String::from("float"))],
+//                children: vec![]
+//            }
+//        )),
+//        single_element().parse("<div class=\"float\"/>")
+//    );
+//}
